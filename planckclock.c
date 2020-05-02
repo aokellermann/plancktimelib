@@ -44,7 +44,13 @@ planck_time_t planck_time(planck_time_t *out)
 
 planck_tm* planck_localtime(const planck_time_t* time)
 {
+    if (!time)
+        return NULL;
+
     planck_tm* tm = calloc(1, sizeof(planck_tm));
+    if (!tm)
+        return NULL;
+
     memcpy(&tm->nov, time, PLANCK_TIME_SIZE);
     return tm;
 }
