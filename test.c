@@ -12,5 +12,9 @@ int main()
            tm->doe, tm->el, tm->dec, tm->nov, tm->oct, tm->sep, tm->hec,
            tm->quin, tm->quat, tm->tre, tm->du, tm->un);
 
+    char buf[24];
+    printf("%d\n", planck_strftime(buf, 24, "%C%D %E %F:%G %H ", tm));
+    puts(buf);
+
     return 0;
 }

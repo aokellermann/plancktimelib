@@ -2,6 +2,8 @@
 #include <gmp.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+#include <ctype.h>
 
 #include "planckclock.h"
 
@@ -53,4 +55,45 @@ planck_tm* planck_localtime(const planck_time_t* time)
 
     memcpy(&tm->nov, time, PLANCK_TIME_SIZE);
     return tm;
+}
+
+size_t planck_strftime(char *s, size_t max, const char *format,
+                       const planck_tm *tm)
+{
+    // Format: A-X for powers of 10^2
+
+    size_t i = 0, j = 0, maxf = strlen(format);
+    const unsigned char mask = 0xf;
+    const void* tm_void = tm;
+    while (i < max && j < maxf)
+    {
+        if (j != maxf - 1 && format[j] == '%')
+        {
+            const unsigned int c = format[j + 1];
+            if (c >= 'A' && c <= 'X')
+            {
+                unsigned int c_from_zero = ('X' - c), c_hex = 0;
+                memcpy(&c_hex, &tm_void[c_from_zero], 1);
+
+                sprintf(&s[i], "%x%x", (c_hex >> 4) & mask, c_hex & mask);
+                s[i] = toupper(s[i]);
+                s[i + 1] = toupper(s[i + 1]);
+
+                i += 2;
+                j += 2;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+        else
+        {
+            s[i] = format[j];
+            ++i;
+            ++j;
+        }
+    }
+    s[i] = '\0';
+    return i;
 }

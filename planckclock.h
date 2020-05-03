@@ -31,4 +31,7 @@ planck_time_t planck_time(planck_time_t*);
 
 planck_tm* planck_localtime(const planck_time_t*);
 
+size_t planck_strftime(char *s, size_t max, const char *format,
+                       const planck_tm *tm);
+
 #endif // PLANCKCLOCK_LIBRARY_H_
