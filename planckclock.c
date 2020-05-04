@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <math.h>
 #include <sys/time.h>
 
 #include "planckclock.h"
@@ -70,6 +71,60 @@ planck_time_t planck_time_at_planck_tm(const planck_tm* ptm)
     planck_time_t ptime_now = 0;
     memcpy(&ptime_now, &ptm->nov, PLANCK_TIME_SIZE);
     return ptime_now;
+}
+
+int tv_at_planck_time(struct timeval* tv_out, const planck_tm* ptime)
+{
+    mpz_t total_time, current_byte;
+    mpz_init_set_ui(total_time, 0);
+    mpz_init(current_byte);
+    unsigned char pwr_base_2 = 0x0, byte;
+    const void* void_ptime = ptime;
+    int j;
+    for (j = 0; j < (int)sizeof(planck_tm); ++j)
+    {
+        // Get byte
+        memcpy(&byte, &void_ptime[j], 1);
+
+        // Get place value
+        mpz_set_ui(current_byte, byte);
+        mpz_mul_2exp(current_byte, current_byte, pwr_base_2);
+
+        // Add to total
+        mpz_add(total_time, total_time, current_byte);
+
+        pwr_base_2 += 8;
+    }
+
+    // Get time since unix epoch
+    mpz_t time_before_unix_epoch, time_since_unix_epoch;
+    mpz_init_set_str(time_before_unix_epoch, TIME_SINCE_BIG_BANG, 10);
+    mpz_init_set(time_since_unix_epoch, total_time);
+    mpz_sub(time_since_unix_epoch, time_since_unix_epoch, time_before_unix_epoch);
+
+    // Get time per usecond
+    mpf_t us_per_time;
+    mpf_init_set_str(us_per_time, TIME_PER_USECOND, 10);
+    mpf_ui_div(us_per_time, 1, us_per_time);
+
+    // Get useconds since unix epoch
+    mpf_t useconds_since_unix_epoch;
+    mpf_init(useconds_since_unix_epoch);
+    mpf_set_z(useconds_since_unix_epoch, time_since_unix_epoch);
+    mpf_mul(useconds_since_unix_epoch, useconds_since_unix_epoch, us_per_time);
+
+    // Return false if useconds doesn't fit in uint64_t
+    if (!mpf_fits_ulong_p(useconds_since_unix_epoch))
+        return 0;
+
+    // Get seconds and remainder useconds
+    uint64_t useconds_since_unix_epoch_ui = mpf_get_ui(useconds_since_unix_epoch);
+    uint64_t seconds = useconds_since_unix_epoch_ui / 1000000;
+    uint64_t useconds = useconds_since_unix_epoch_ui % 1000000;
+
+    tv_out->tv_sec = seconds;
+    tv_out->tv_usec = useconds;
+    return 1;
 }
 
 planck_time_t planck_time_now(planck_tm** ptm_ph_out)
