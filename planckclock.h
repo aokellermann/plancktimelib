@@ -2,6 +2,7 @@
 #define PLANCKCLOCK_LIBRARY_H_
 
 #include <stdint.h>
+#include <sys/time.h>
 
 /**
  * This type represents a timestamp in novs
@@ -13,6 +14,7 @@ typedef uint64_t planck_time_t;
  */
 typedef struct planck_tm
 {
+    uint16_t units  ;  // 0x10^(0x4*0x0) = 10^00
     uint16_t un     ;  // 0x10^(0x4*0x1) = 10^04
     uint16_t du     ;  // 0x10^(0x4*0x2) = 10^08
     uint16_t tre    ;  // 0x10^(0x4*0x3) = 10^0C
@@ -27,9 +29,20 @@ typedef struct planck_tm
     uint16_t doe    ;  // 0x10^(0x4*0xA) = 10^30
 } planck_tm;
 
-planck_time_t planck_time(planck_time_t*);
+/**
+ * Gets the current time.
+ * @param ptm_ph_out ptr to handle of output struct (may be null)
+ * @return current time in novs
+ */
+planck_time_t planck_time_now(planck_tm** ptm_ph_out);
 
-planck_tm* planck_localtime(const planck_time_t*);
+/**
+ * Gets the time at the given timeval.
+ * @param tv timeval to get time at
+ * @param ptm_ph_out ptr to handle of output struct (may be null)
+ * @return current time in novs
+ */
+planck_time_t planck_time_at_tv(struct timeval* tv, planck_tm** ptm_ph_out);
 
 unsigned long planck_strftime(char *s, unsigned long max, const char *format,
                               const planck_tm *tm);

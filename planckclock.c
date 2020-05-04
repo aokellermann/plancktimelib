@@ -4,63 +4,96 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <sys/time.h>
 
 #include "planckclock.h"
 
-#define UNS_PER_SECOND      "1.85488921611077614362073522501613984835872810662879e43"
-#define UNS_SINCE_BIG_BANG  "8071833529780809902742760646451040575040216335127996084558318"
-#define NOV_POWER_BASE_2    0x4 * 0x24
+#define TIME_PER_USECOND     "1.85488921611077614362073522501613984835872810662879e37"
+#define TIME_SINCE_BIG_BANG  "8071833529780809902742760646451040575040216335127996084558318"
 #define PLANCK_TIME_SIZE    8
 
-planck_time_t planck_time_at_unix_timestamp(time_t ts)
+int hex_to_int(char ch)
 {
-    mpf_t input_unix_time_in_s, uns_per_s, uns_since_big_bang;
-    mpf_init_set_si(input_unix_time_in_s, ts);
-    mpf_init_set_str(uns_per_s, UNS_PER_SECOND, 10);
-    mpf_init_set_str(uns_since_big_bang, UNS_SINCE_BIG_BANG, 10);
+    if (ch >= '0' && ch <= '9')
+        return ch - '0';
+    if (ch >= 'A' && ch <= 'F')
+        return ch - 'A' + 10;
+    if (ch >= 'a' && ch <= 'f')
+        return ch - 'a' + 10;
+    return -1;
+}
 
-    mpf_t planck_time_since_unix_epoch, input_planck_time_raw_f;
-    mpf_init(planck_time_since_unix_epoch);
+planck_tm* inner_planck_time_at_tv(const struct timeval* tv)
+{
+    // Set up constants and input time
+    mpf_t input_unix_time_in_us, time_per_us, time_since_big_bang;
+    mpf_init_set_ui(input_unix_time_in_us, tv->tv_sec);
+    mpf_mul_ui(input_unix_time_in_us, input_unix_time_in_us, 1000000);
+    mpf_add_ui(input_unix_time_in_us, input_unix_time_in_us, tv->tv_usec);
+    mpf_init_set_str(time_per_us, TIME_PER_USECOND, 10);
+    mpf_init_set_str(time_since_big_bang, TIME_SINCE_BIG_BANG, 10);
+
+    // Add time from before unix epoch to time since unix epoch
+    mpf_t time_since_unix_epoch, input_planck_time_raw_f;
+    mpf_init(time_since_unix_epoch);
+    mpf_mul(time_since_unix_epoch, input_unix_time_in_us, time_per_us);
     mpf_init(input_planck_time_raw_f);
-    mpf_mul(planck_time_since_unix_epoch, input_unix_time_in_s, uns_per_s);
-    mpf_add(input_planck_time_raw_f, uns_since_big_bang,
-            planck_time_since_unix_epoch);
+    mpf_add(input_planck_time_raw_f, time_since_big_bang, time_since_unix_epoch);
 
-    // round down to nearest un
-    mpf_floor(input_planck_time_raw_f, input_planck_time_raw_f);
+    // Convert time to integer
+    mpz_t input_planck_time_z;
+    mpz_init(input_planck_time_z);
+    mpz_set_f(input_planck_time_z, input_planck_time_raw_f);
 
-    // divide to get correct power magnitude
-    mpf_div_2exp(input_planck_time_raw_f,
-                 input_planck_time_raw_f, NOV_POWER_BASE_2);
+    // Convert to hex string
+    char* input_planck_time_str = mpz_get_str(NULL, 16, input_planck_time_z);
 
-    return mpf_get_ui(input_planck_time_raw_f);
+    // Allocate output struct and copy data
+    void* pt = calloc(1, sizeof(planck_tm));
+    int i, j = (int)strlen(input_planck_time_str) - 1;
+    unsigned char byte;
+    for (i = 0; j >= 0; ++i, j -= 2)
+    {
+        byte = hex_to_int(input_planck_time_str[j]);
+        if (j > 0)  // check if nibble to left is occupied
+            byte += (hex_to_int(input_planck_time_str[j - 1]) << 4);
+
+        memset(&pt[i], byte, 1);
+    }
+
+    return pt;
 }
 
-planck_time_t planck_time(planck_time_t *out)
+planck_time_t planck_time_now(planck_tm** ptm_ph_out)
 {
-    const planck_time_t time_now = planck_time_at_unix_timestamp(time(NULL));
-    if (out)
-        *out = time_now;
-    return time_now;
+    // Get current time
+    struct timeval tv_now;
+    gettimeofday(&tv_now, NULL);
+
+    return planck_time_at_tv(&tv_now, ptm_ph_out);
 }
 
-planck_tm* planck_localtime(const planck_time_t* time)
+planck_time_t planck_time_at_tv(struct timeval* tv, planck_tm** ptm_ph_out)
 {
-    if (!time)
-        return NULL;
+    planck_tm* ptm_now = inner_planck_time_at_tv(tv);
 
-    planck_tm* tm = calloc(1, sizeof(planck_tm));
-    if (!tm)
-        return NULL;
+    // Copy novs to return variable
+    planck_time_t ptime_now = 0;
+    memcpy(&ptime_now, &ptm_now->nov, PLANCK_TIME_SIZE);
 
-    memcpy(&tm->nov, time, PLANCK_TIME_SIZE);
-    return tm;
+    // If handle ptr is not null, set. Otherwise free ptm_now.
+    if (ptm_ph_out)
+        *ptm_ph_out = ptm_now;
+    else
+        free(ptm_now);
+
+    return ptime_now;
 }
 
 size_t planck_strftime(char *s, size_t max, const char *format,
                        const planck_tm *tm)
 {
-    // Format: A-X for powers of 10^2
+    // Format: A-Z for powers of 10^2
 
     size_t i = 0, j = 0, maxf = strlen(format);
     const unsigned char mask = 0xf;
@@ -70,9 +103,9 @@ size_t planck_strftime(char *s, size_t max, const char *format,
         if (j != maxf - 1 && format[j] == '%')
         {
             const unsigned int c = format[j + 1];
-            if (c >= 'A' && c <= 'X')
+            if (c >= 'A' && c <= 'Z')
             {
-                unsigned int c_from_zero = ('X' - c), c_hex = 0;
+                unsigned int c_from_zero = ('Z' - c), c_hex = 0;
                 memcpy(&c_hex, &tm_void[c_from_zero], 1);
 
                 sprintf(&s[i], "%x%x", (c_hex >> 4) & mask, c_hex & mask);
