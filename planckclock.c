@@ -64,6 +64,14 @@ planck_tm* inner_planck_time_at_tv(const struct timeval* tv)
     return pt;
 }
 
+planck_time_t planck_time_at_planck_tm(const planck_tm* ptm)
+{
+    // Copy novs to return variable
+    planck_time_t ptime_now = 0;
+    memcpy(&ptime_now, &ptm->nov, PLANCK_TIME_SIZE);
+    return ptime_now;
+}
+
 planck_time_t planck_time_now(planck_tm** ptm_ph_out)
 {
     // Get current time
@@ -76,10 +84,7 @@ planck_time_t planck_time_now(planck_tm** ptm_ph_out)
 planck_time_t planck_time_at_tv(struct timeval* tv, planck_tm** ptm_ph_out)
 {
     planck_tm* ptm_now = inner_planck_time_at_tv(tv);
-
-    // Copy novs to return variable
-    planck_time_t ptime_now = 0;
-    memcpy(&ptime_now, &ptm_now->nov, PLANCK_TIME_SIZE);
+    planck_time_t ptime_now = planck_time_at_planck_tm(ptm_now);
 
     // If handle ptr is not null, set. Otherwise free ptm_now.
     if (ptm_ph_out)
