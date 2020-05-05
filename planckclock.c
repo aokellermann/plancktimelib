@@ -75,6 +75,7 @@ planck_time_t planck_time_at_planck_tm(const planck_tm* ptm)
 
 void planck_tm_at_planck_time(planck_tm* ptm_out, planck_time_t time)
 {
+    memset(ptm_out, 0, (void*)&ptm_out->nov - (void*)ptm_out);
     memcpy(&ptm_out->nov, &time, PLANCK_TIME_SIZE);
 }
 
