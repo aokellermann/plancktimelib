@@ -108,15 +108,14 @@ int tv_at_planck_time(struct timeval* tv_out, const planck_tm* ptime)
     mpz_sub(time_since_unix_epoch, time_since_unix_epoch, time_before_unix_epoch);
 
     // Get time per usecond
-    mpf_t us_per_time;
-    mpf_init_set_str(us_per_time, TIME_PER_USECOND, 10);
-    mpf_ui_div(us_per_time, 1, us_per_time);
+    mpf_t time_per_us;
+    mpf_init_set_str(time_per_us, TIME_PER_USECOND, 10);
 
     // Get useconds since unix epoch
     mpf_t useconds_since_unix_epoch;
     mpf_init(useconds_since_unix_epoch);
     mpf_set_z(useconds_since_unix_epoch, time_since_unix_epoch);
-    mpf_mul(useconds_since_unix_epoch, useconds_since_unix_epoch, us_per_time);
+    mpf_div(useconds_since_unix_epoch, useconds_since_unix_epoch, time_per_us);
 
     // Return false if useconds doesn't fit in uint64_t
     if (!mpf_fits_ulong_p(useconds_since_unix_epoch))
