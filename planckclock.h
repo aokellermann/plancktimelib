@@ -25,8 +25,8 @@ typedef struct planck_tm
     uint16_t oct    ;  // 0x10^(0x4*0x8) = 10^20
     uint16_t nov    ;  // 0x10^(0x4*0x9) = 10^24
     uint16_t dec    ;  // 0x10^(0x4*0xA) = 10^28
-    uint16_t el     ;  // 0x10^(0x4*0xA) = 10^2C
-    uint16_t doe    ;  // 0x10^(0x4*0xA) = 10^30
+    uint16_t el     ;  // 0x10^(0x4*0xB) = 10^2C
+    uint16_t doe    ;  // 0x10^(0x4*0xC) = 10^30
 } planck_tm;
 
 planck_time_t planck_time_at_planck_tm(const planck_tm* ptm);
