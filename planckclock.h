@@ -29,6 +29,10 @@ typedef struct planck_tm
     uint16_t doe    ;  // 0x10^(0x4*0xA) = 10^30
 } planck_tm;
 
+planck_time_t planck_time_at_planck_tm(const planck_tm* ptm);
+
+void planck_tm_at_planck_time(planck_tm* ptm_out, planck_time_t time);
+
 /**
  * Gets the current time.
  * @param ptm_ph_out ptr to handle of output struct (may be null)

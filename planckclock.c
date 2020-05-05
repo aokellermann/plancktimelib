@@ -73,6 +73,11 @@ planck_time_t planck_time_at_planck_tm(const planck_tm* ptm)
     return ptime_now;
 }
 
+void planck_tm_at_planck_time(planck_tm* ptm_out, planck_time_t time)
+{
+    memcpy(&ptm_out->nov, &time, PLANCK_TIME_SIZE);
+}
+
 int tv_at_planck_time(struct timeval* tv_out, const planck_tm* ptime)
 {
     mpz_t total_time, current_byte;
