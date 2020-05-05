@@ -56,6 +56,8 @@ int tv_at_planck_time(struct timeval* tv_out, const planck_tm* ptime);
  */
 planck_time_t planck_time_at_tv(struct timeval* tv, planck_tm** ptm_ph_out);
 
+void planck_difftime_get_tv(const planck_tm* start, const planck_tm* end, struct timeval* tv_out);
+
 unsigned long planck_strftime(char *s, unsigned long max, const char *format,
                               const planck_tm *tm);
 

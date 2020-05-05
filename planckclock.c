@@ -154,6 +154,14 @@ planck_time_t planck_time_at_tv(struct timeval* tv, planck_tm** ptm_ph_out)
     return ptime_now;
 }
 
+void planck_difftime_get_tv(const planck_tm* start, const planck_tm* end, struct timeval* tv_out)
+{
+    struct timeval tv_start, tv_end;
+    tv_at_planck_time(&tv_start, start);
+    tv_at_planck_time(&tv_end, end);
+    timersub(&tv_end, &tv_start, tv_out);
+}
+
 size_t planck_strftime(char *s, size_t max, const char *format,
                        const planck_tm *tm)
 {
