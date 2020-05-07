@@ -44,7 +44,7 @@ int hex_to_int(char ch)
     return -1;
 }
 
-planck_tm* inner_planck_time_at_ts(const struct timespec* ts)
+ptm* inner_planck_time_at_ts(const struct timespec* ts)
 {
     // Set up constants and input time
     mpf_t input_unix_time_in_ns, time_per_ns, time_since_big_bang;
@@ -70,7 +70,7 @@ planck_tm* inner_planck_time_at_ts(const struct timespec* ts)
     char* input_planck_time_str = mpz_get_str(NULL, 16, input_planck_time_z);
 
     // Allocate output struct and copy data
-    void* pt = calloc(1, sizeof(planck_tm));
+    void* pt = calloc(1, sizeof(ptm));
     int i, j = (int)strlen(input_planck_time_str) - 1;
     unsigned char byte;
     for (i = 0; j >= 0; ++i, j -= 2)
@@ -85,21 +85,21 @@ planck_tm* inner_planck_time_at_ts(const struct timespec* ts)
     return pt;
 }
 
-planck_time_t planck_time_at_planck_tm(const planck_tm* ptm)
+ptime_t planck_time_at_planck_tm(const ptm* ptm)
 {
     // Copy novs to return variable
-    planck_time_t ptime_now = 0;
+    ptime_t ptime_now = 0;
     memcpy(&ptime_now, &ptm->nov, PLANCK_TIME_SIZE);
     return ptime_now;
 }
 
-void planck_tm_at_planck_time(planck_tm* ptm_out, planck_time_t time)
+void planck_tm_at_planck_time(ptm* ptm_out, ptime_t time)
 {
     memset(ptm_out, 0, (void*)&ptm_out->nov - (void*)ptm_out);
     memcpy(&ptm_out->nov, &time, PLANCK_TIME_SIZE);
 }
 
-int ts_at_planck_time(struct timespec* ts_out, const planck_tm* ptime)
+int ts_at_planck_time(struct timespec* ts_out, const ptm* ptime)
 {
     mpz_t total_time, current_byte;
     mpz_init_set_ui(total_time, 0);
@@ -107,7 +107,7 @@ int ts_at_planck_time(struct timespec* ts_out, const planck_tm* ptime)
     unsigned char pwr_base_2 = 0x0, byte;
     const void* void_ptime = ptime;
     int j;
-    for (j = 0; j < (int)sizeof(planck_tm); ++j)
+    for (j = 0; j < (int)sizeof(ptm); ++j)
     {
         // Get byte
         memcpy(&byte, &void_ptime[j], 1);
@@ -152,7 +152,7 @@ int ts_at_planck_time(struct timespec* ts_out, const planck_tm* ptime)
     return 1;
 }
 
-planck_time_t planck_time_now(planck_tm** ptm_ph_out)
+ptime_t planck_time_now(ptm** ptm_ph_out)
 {
     // Get current time
     struct timespec ts_now;
@@ -161,10 +161,10 @@ planck_time_t planck_time_now(planck_tm** ptm_ph_out)
     return planck_time_at_ts(&ts_now, ptm_ph_out);
 }
 
-planck_time_t planck_time_at_ts(struct timespec* ts, planck_tm** ptm_ph_out)
+ptime_t planck_time_at_ts(struct timespec* ts, ptm** ptm_ph_out)
 {
-    planck_tm* ptm_now = inner_planck_time_at_ts(ts);
-    planck_time_t ptime_now = planck_time_at_planck_tm(ptm_now);
+    ptm* ptm_now = inner_planck_time_at_ts(ts);
+    ptime_t ptime_now = planck_time_at_planck_tm(ptm_now);
 
     // If handle ptr is not null, set. Otherwise free ptm_now.
     if (ptm_ph_out)
@@ -175,7 +175,7 @@ planck_time_t planck_time_at_ts(struct timespec* ts, planck_tm** ptm_ph_out)
     return ptime_now;
 }
 
-void planck_difftime_get_ts(const planck_tm* start, const planck_tm* end, struct timespec* ts_out)
+void planck_difftime_get_ts(const ptm* start, const ptm* end, struct timespec* ts_out)
 {
     struct timespec ts_start, ts_end;
     ts_at_planck_time(&ts_start, start);
@@ -184,7 +184,7 @@ void planck_difftime_get_ts(const planck_tm* start, const planck_tm* end, struct
 }
 
 size_t planck_strftime(char *s, size_t max, const char *format,
-                       const planck_tm *tm)
+                       const ptm *tm)
 {
     // Format: A-Z for powers of 10^2
 

@@ -7,12 +7,12 @@
 /**
  * This type represents a timestamp in novs
  */
-typedef uint64_t planck_time_t;
+typedef uint64_t ptime_t;
 
 /**
  * This type represents a high precision timestamp
  */
-typedef struct planck_tm
+typedef struct ptm
 {
     uint16_t units  ;  // 0x10^(0x4*0x0) = 10^00
     uint16_t un     ;  // 0x10^(0x4*0x1) = 10^04
@@ -27,18 +27,18 @@ typedef struct planck_tm
     uint16_t dec    ;  // 0x10^(0x4*0xA) = 10^28
     uint16_t el     ;  // 0x10^(0x4*0xB) = 10^2C
     uint16_t doe    ;  // 0x10^(0x4*0xC) = 10^30
-} planck_tm;
+} ptm;
 
-planck_time_t planck_time_at_planck_tm(const planck_tm* ptm);
+ptime_t planck_time_at_planck_tm(const ptm* ptm);
 
-void planck_tm_at_planck_time(planck_tm* ptm_out, planck_time_t time);
+void planck_tm_at_planck_time(ptm* ptm_out, ptime_t time);
 
 /**
  * Gets the current time.
  * @param ptm_ph_out ptr to handle of output struct (may be null)
  * @return current time in novs
  */
-planck_time_t planck_time_now(planck_tm** ptm_ph_out);
+ptime_t planck_time_now(ptm** ptm_ph_out);
 
 /**
  * Stores in ts_out the time that ptime corresponds to.
@@ -46,7 +46,7 @@ planck_time_t planck_time_now(planck_tm** ptm_ph_out);
  * @param ptime
  * @return boolean whether ptime fits in ts_out
  */
-int ts_at_planck_time(struct timespec* ts_out, const planck_tm* ptime);
+int ts_at_planck_time(struct timespec* ts_out, const ptm* ptime);
 
 /**
  * Gets the time at the given timespec.
@@ -54,11 +54,11 @@ int ts_at_planck_time(struct timespec* ts_out, const planck_tm* ptime);
  * @param ptm_ph_out ptr to handle of output struct (may be null)
  * @return current time in novs
  */
-planck_time_t planck_time_at_ts(struct timespec* ts, planck_tm** ptm_ph_out);
+ptime_t planck_time_at_ts(struct timespec* ts, ptm** ptm_ph_out);
 
-void planck_difftime_get_ts(const planck_tm* start, const planck_tm* end, struct timespec* ts_out);
+void planck_difftime_get_ts(const ptm* start, const ptm* end, struct timespec* ts_out);
 
 unsigned long planck_strftime(char *s, unsigned long max, const char *format,
-                              const planck_tm *tm);
+                              const ptm *tm);
 
 #endif // PLANCKCLOCK_LIBRARY_H_
