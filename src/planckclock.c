@@ -5,13 +5,33 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <math.h>
-#include <sys/time.h>
 
 #include "planckclock.h"
 
-#define TIME_PER_USECOND     "1.85488921611077614362073522501613984835872810662879e37"
+#define TIME_PER_NSECOND     "1.85488921611077614362073522501613984835872810662879e34"
 #define TIME_SINCE_BIG_BANG  "8071833529780809902742760646451040575040216335127996084558318"
 #define PLANCK_TIME_SIZE    8
+
+#define ts_add(a, b, result)			                \
+  do {									                \
+    (result)->tv_sec  = (a)->tv_sec  + (b)->tv_sec;		\
+    (result)->tv_nsec = (a)->tv_usec + (b)->tv_nsec;	\
+    if ((result)->tv_nsec >= 1000000000)				\
+    {									                \
+	    ++(result)->tv_sec;						        \
+	    (result)->tv_nsec -= 1000000000;				\
+    }									                \
+  } while (0)
+
+#define ts_sub(a, b, result)						    \
+  do {									                \
+    (result)->tv_sec  = (a)->tv_sec  - (b)->tv_sec;		\
+    (result)->tv_nsec = (a)->tv_nsec - (b)->tv_nsec;	\
+    if ((result)->tv_nsec < 0) {					    \
+      --(result)->tv_sec;						        \
+      (result)->tv_nsec += 1000000000;					\
+    }									                \
+  } while (0)
 
 int hex_to_int(char ch)
 {
@@ -24,20 +44,20 @@ int hex_to_int(char ch)
     return -1;
 }
 
-planck_tm* inner_planck_time_at_tv(const struct timeval* tv)
+planck_tm* inner_planck_time_at_ts(const struct timespec* ts)
 {
     // Set up constants and input time
-    mpf_t input_unix_time_in_us, time_per_us, time_since_big_bang;
-    mpf_init_set_ui(input_unix_time_in_us, tv->tv_sec);
-    mpf_mul_ui(input_unix_time_in_us, input_unix_time_in_us, 1000000);
-    mpf_add_ui(input_unix_time_in_us, input_unix_time_in_us, tv->tv_usec);
-    mpf_init_set_str(time_per_us, TIME_PER_USECOND, 10);
+    mpf_t input_unix_time_in_ns, time_per_ns, time_since_big_bang;
+    mpf_init_set_ui(input_unix_time_in_ns, ts->tv_sec);
+    mpf_mul_ui(input_unix_time_in_ns, input_unix_time_in_ns, 1000000000);
+    mpf_add_ui(input_unix_time_in_ns, input_unix_time_in_ns, ts->tv_nsec);
+    mpf_init_set_str(time_per_ns, TIME_PER_NSECOND, 10);
     mpf_init_set_str(time_since_big_bang, TIME_SINCE_BIG_BANG, 10);
 
     // Add time from before unix epoch to time since unix epoch
     mpf_t time_since_unix_epoch, input_planck_time_raw_f;
     mpf_init(time_since_unix_epoch);
-    mpf_mul(time_since_unix_epoch, input_unix_time_in_us, time_per_us);
+    mpf_mul(time_since_unix_epoch, input_unix_time_in_ns, time_per_ns);
     mpf_init(input_planck_time_raw_f);
     mpf_add(input_planck_time_raw_f, time_since_big_bang, time_since_unix_epoch);
 
@@ -79,7 +99,7 @@ void planck_tm_at_planck_time(planck_tm* ptm_out, planck_time_t time)
     memcpy(&ptm_out->nov, &time, PLANCK_TIME_SIZE);
 }
 
-int tv_at_planck_time(struct timeval* tv_out, const planck_tm* ptime)
+int ts_at_planck_time(struct timespec* ts_out, const planck_tm* ptime)
 {
     mpz_t total_time, current_byte;
     mpz_init_set_ui(total_time, 0);
@@ -108,42 +128,42 @@ int tv_at_planck_time(struct timeval* tv_out, const planck_tm* ptime)
     mpz_init_set(time_since_unix_epoch, total_time);
     mpz_sub(time_since_unix_epoch, time_since_unix_epoch, time_before_unix_epoch);
 
-    // Get time per usecond
-    mpf_t time_per_us;
-    mpf_init_set_str(time_per_us, TIME_PER_USECOND, 10);
+    // Get time per nsecond
+    mpf_t time_per_ns;
+    mpf_init_set_str(time_per_ns, TIME_PER_NSECOND, 10);
 
-    // Get useconds since unix epoch
-    mpf_t useconds_since_unix_epoch;
-    mpf_init(useconds_since_unix_epoch);
-    mpf_set_z(useconds_since_unix_epoch, time_since_unix_epoch);
-    mpf_div(useconds_since_unix_epoch, useconds_since_unix_epoch, time_per_us);
+    // Get nseconds since unix epoch
+    mpf_t nseconds_since_unix_epoch;
+    mpf_init(nseconds_since_unix_epoch);
+    mpf_set_z(nseconds_since_unix_epoch, time_since_unix_epoch);
+    mpf_div(nseconds_since_unix_epoch, nseconds_since_unix_epoch, time_per_ns);
 
-    // Return false if useconds doesn't fit in uint64_t
-    if (!mpf_fits_ulong_p(useconds_since_unix_epoch))
+    // Return false if nseconds doesn't fit in uint64_t
+    if (!mpf_fits_ulong_p(nseconds_since_unix_epoch))
         return 0;
 
-    // Get seconds and remainder useconds
-    uint64_t useconds_since_unix_epoch_ui = mpf_get_ui(useconds_since_unix_epoch);
-    uint64_t seconds = useconds_since_unix_epoch_ui / 1000000;
-    uint64_t useconds = useconds_since_unix_epoch_ui % 1000000;
+    // Get seconds and remainder nseconds
+    uint64_t nseconds_since_unix_epoch_ui = mpf_get_ui(nseconds_since_unix_epoch);
+    uint64_t seconds = nseconds_since_unix_epoch_ui / 1000000000;
+    uint64_t nseconds = nseconds_since_unix_epoch_ui % 1000000000;
 
-    tv_out->tv_sec = seconds;
-    tv_out->tv_usec = useconds;
+    ts_out->tv_sec = seconds;
+    ts_out->tv_nsec = nseconds;
     return 1;
 }
 
 planck_time_t planck_time_now(planck_tm** ptm_ph_out)
 {
     // Get current time
-    struct timeval tv_now;
-    gettimeofday(&tv_now, NULL);
+    struct timespec ts_now;
+    clock_gettime(CLOCK_REALTIME, &ts_now);
 
-    return planck_time_at_tv(&tv_now, ptm_ph_out);
+    return planck_time_at_ts(&ts_now, ptm_ph_out);
 }
 
-planck_time_t planck_time_at_tv(struct timeval* tv, planck_tm** ptm_ph_out)
+planck_time_t planck_time_at_ts(struct timespec* ts, planck_tm** ptm_ph_out)
 {
-    planck_tm* ptm_now = inner_planck_time_at_tv(tv);
+    planck_tm* ptm_now = inner_planck_time_at_ts(ts);
     planck_time_t ptime_now = planck_time_at_planck_tm(ptm_now);
 
     // If handle ptr is not null, set. Otherwise free ptm_now.
@@ -155,12 +175,12 @@ planck_time_t planck_time_at_tv(struct timeval* tv, planck_tm** ptm_ph_out)
     return ptime_now;
 }
 
-void planck_difftime_get_tv(const planck_tm* start, const planck_tm* end, struct timeval* tv_out)
+void planck_difftime_get_ts(const planck_tm* start, const planck_tm* end, struct timespec* ts_out)
 {
-    struct timeval tv_start, tv_end;
-    tv_at_planck_time(&tv_start, start);
-    tv_at_planck_time(&tv_end, end);
-    timersub(&tv_end, &tv_start, tv_out);
+    struct timespec ts_start, ts_end;
+    ts_at_planck_time(&ts_start, start);
+    ts_at_planck_time(&ts_end, end);
+    ts_sub(&ts_end, &ts_start, ts_out);
 }
 
 size_t planck_strftime(char *s, size_t max, const char *format,

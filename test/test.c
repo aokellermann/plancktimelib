@@ -20,9 +20,9 @@ int main()
            planck_strftime(buf, 24, "%C%D %E %F:%G %H ", tm));
     printf("planck_strftime out: %s\n", buf);
 
-    struct timeval tv_now;
-    tv_at_planck_time(&tv_now, tm);
-    printf("tv now: %ld.%06ld\n", tv_now.tv_sec, tv_now.tv_usec);
+    struct timespec tv_now;
+    ts_at_planck_time(&tv_now, tm);
+    printf("tv now: %ld.%09ld\n", tv_now.tv_sec, tv_now.tv_nsec);
 
     ++time_now;
     printf("planck_time_t next nov: %lx\n", time_now);
@@ -33,13 +33,13 @@ int main()
            next_nov.doe, next_nov.el, next_nov.dec, next_nov.nov, next_nov.oct, next_nov.sep, next_nov.hec,
            next_nov.quin, next_nov.quat, next_nov.tre, next_nov.du, next_nov.un, next_nov.units);
 
-    struct timeval tv_next_nov;
-    tv_at_planck_time(&tv_next_nov, &next_nov);
-    printf("tv at next nov: %ld.%06ld\n", tv_next_nov.tv_sec, tv_next_nov.tv_usec);
+    struct timespec ts_next_nov;
+    ts_at_planck_time(&ts_next_nov, &next_nov);
+    printf("tv at next nov: %ld.%09ld\n", ts_next_nov.tv_sec, ts_next_nov.tv_nsec);
 
-    struct timeval tv_difference;
-    planck_difftime_get_tv(tm, &next_nov, &tv_difference);
-    printf("difference between novs: %ld.%06ld\n", tv_difference.tv_sec, tv_difference.tv_usec);
+    struct timespec ts_difference;
+    planck_difftime_get_ts(tm, &next_nov, &ts_difference);
+    printf("difference between novs: %ld.%09ld\n", ts_difference.tv_sec, ts_difference.tv_nsec);
 
     return 0;
 }
