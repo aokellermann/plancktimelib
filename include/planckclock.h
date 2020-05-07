@@ -97,15 +97,17 @@ ptime_t ptime_at_ts(ptm* ptm_out, const struct timespec* ts_in);
  * Writes to ts_out the corresponding time according to ptime_in
  * @param ts_out output corresponding timespec ptr
  * @param ptime_in input time
+ * @return 1 if ptime_in fits in ts_out, 0 if not
  */
-void ts_at_ptime(struct timespec* ts_out, ptime_t ptime_in);
+int ts_at_ptime(struct timespec* ts_out, ptime_t ptime_in);
 
 /**
  * Writes to ts_out the corresponding time according to ptm_in
  * @param ts_out output corresponding timespec ptr
  * @param ptm_in input time ptr
+ * @return 1 if ptm_in fits in ts_out, 0 if not
  */
-void ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in);
+int ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in);
 
 // endregion
 
@@ -115,41 +117,41 @@ void ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in);
 
 // region Self
 
-ptime_t ptm_add_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b);
+int ptm_add_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b);
 
-ptime_t ptm_add_ptime(ptm* ptm_out, const ptm* ptm_in_a, ptime_t ptime_in_b);
+int ptm_add_ptime(ptm* ptm_out, const ptm* ptm_in_a, ptime_t ptime_in_b);
 
-ptime_t ptime_add_ptm(ptm* ptm_out, ptime_t ptime_in_a, const ptm* ptm_in_b);
+int ptime_add_ptm(ptm* ptm_out, ptime_t ptime_in_a, const ptm* ptm_in_b);
 
-ptime_t ptime_add_ptime(ptm* ptm_out, ptime_t ptime_in_a, ptime_t ptime_in_b);
+int ptime_add_ptime(ptm* ptm_out, ptime_t ptime_in_a, ptime_t ptime_in_b);
 
-ptime_t ptm_sub_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b);
+int ptm_sub_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b);
 
-ptime_t ptm_sub_ptime(ptm* ptm_out, const ptm* ptm_in_a, ptime_t ptime_in_b);
+int ptm_sub_ptime(ptm* ptm_out, const ptm* ptm_in_a, ptime_t ptime_in_b);
 
-ptime_t ptime_sub_ptm(ptm* ptm_out, ptime_t ptime_in_a, const ptm* ptm_in_b);
+int ptime_sub_ptm(ptm* ptm_out, ptime_t ptime_in_a, const ptm* ptm_in_b);
 
-ptime_t ptime_sub_ptime(ptm* ptm_out, ptime_t ptime_in_a, ptime_t ptime_in_b);
+int ptime_sub_ptime(ptm* ptm_out, ptime_t ptime_in_a, ptime_t ptime_in_b);
 
 // endregion
 
 // region timespec
 
-ptime_t ptm_add_ts(ptm* ptm_out, const ptm* ptm_in_a, const struct timespec* timespec_in_b);
+int ptm_add_ts(ptm* ptm_out, const ptm* ptm_in_a, const struct timespec* timespec_in_b);
 
-ptime_t ptime_add_ts(ptm* ptm_out, ptime_t ptime_in_a, const struct timespec* timespec_in_b);
+int ptime_add_ts(ptm* ptm_out, ptime_t ptime_in_a, const struct timespec* timespec_in_b);
 
-ptime_t ts_add_ptm(ptm* ptm_out, const struct timespec* timespec_in_a, const ptm* ptm_in_b);
+int ts_add_ptm(ptm* ptm_out, const struct timespec* timespec_in_a, const ptm* ptm_in_b);
 
-ptime_t ts_add_ptime(ptm* ptm_out, const struct timespec* timespec_in_a, ptime_t ptime_in_b);
+int ts_add_ptime(ptm* ptm_out, const struct timespec* timespec_in_a, ptime_t ptime_in_b);
 
-ptime_t ptm_sub_ts(ptm* ptm_out, const ptm* ptm_in_a, const struct timespec* timespec_in_b);
+int ptm_sub_ts(ptm* ptm_out, const ptm* ptm_in_a, const struct timespec* timespec_in_b);
 
-ptime_t ptime_sub_ts(ptm* ptm_out, ptime_t ptime_in_a, const struct timespec* timespec_in_b);
+int ptime_sub_ts(ptm* ptm_out, ptime_t ptime_in_a, const struct timespec* timespec_in_b);
 
-ptime_t ts_sub_ptm(ptm* ptm_out, const struct timespec* timespec_in_a, const ptm* ptm_in_b);
+int ts_sub_ptm(ptm* ptm_out, const struct timespec* timespec_in_a, const ptm* ptm_in_b);
 
-ptime_t ts_sub_ptime(ptm* ptm_out, const struct timespec* timespec_in_a, ptime_t ptime_in_b);
+int ts_sub_ptime(ptm* ptm_out, const struct timespec* timespec_in_a, ptime_t ptime_in_b);
 
 // endregion
 
