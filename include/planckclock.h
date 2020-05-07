@@ -2,7 +2,7 @@
 #define PLANCKCLOCK_LIBRARY_H_
 
 #include <stdint.h>
-#include <sys/time.h>
+#include <time.h>
 
 /**
  * This type represents a timestamp in novs
@@ -41,22 +41,22 @@ void planck_tm_at_planck_time(planck_tm* ptm_out, planck_time_t time);
 planck_time_t planck_time_now(planck_tm** ptm_ph_out);
 
 /**
- * Stores in tv_out the time that ptime corresponds to.
- * @param tv_out
+ * Stores in ts_out the time that ptime corresponds to.
+ * @param ts_out
  * @param ptime
- * @return boolean whether ptime fits in tv_out
+ * @return boolean whether ptime fits in ts_out
  */
-int tv_at_planck_time(struct timeval* tv_out, const planck_tm* ptime);
+int ts_at_planck_time(struct timespec* ts_out, const planck_tm* ptime);
 
 /**
- * Gets the time at the given timeval.
- * @param tv timeval to get time at
+ * Gets the time at the given timespec.
+ * @param ts timespec to get time at
  * @param ptm_ph_out ptr to handle of output struct (may be null)
  * @return current time in novs
  */
-planck_time_t planck_time_at_tv(struct timeval* tv, planck_tm** ptm_ph_out);
+planck_time_t planck_time_at_ts(struct timespec* ts, planck_tm** ptm_ph_out);
 
-void planck_difftime_get_tv(const planck_tm* start, const planck_tm* end, struct timeval* tv_out);
+void planck_difftime_get_ts(const planck_tm* start, const planck_tm* end, struct timespec* ts_out);
 
 unsigned long planck_strftime(char *s, unsigned long max, const char *format,
                               const planck_tm *tm);
