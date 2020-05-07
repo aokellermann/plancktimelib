@@ -29,6 +29,36 @@ typedef struct ptm
     uint16_t doe    ;  // 0x10^(0x4*0xC) = 10^30
 } ptm;
 
+enum PTIME_PWR
+{
+    UNIT        = 0x00,
+    DUUNIT      = 0x02,
+    UN          = 0x04,
+    DUUN        = 0x06,
+    DU          = 0x08,
+    DUDU        = 0x0A,
+    TRE         = 0x0C,
+    DUTRE       = 0x0E,
+    QUAT        = 0x10,
+    DUQUAT      = 0x12,
+    QUINT       = 0x14,
+    DUQUINT     = 0x16,
+    HEC         = 0x18,
+    DUHEC       = 0x1A,
+    SEP         = 0x1C,
+    DUSEP       = 0x1E,
+    OCT         = 0x20,
+    DUOCT       = 0x22,
+    NOV         = 0x24,
+    DUNOV       = 0x26,
+    DEC         = 0x28,
+    DUDEC       = 0x2A,
+    EL          = 0x2C,
+    DUEL        = 0x2E,
+    DOE         = 0x30,
+    DUDOE       = 0x32,
+};
+
 ptime_t planck_time_at_planck_tm(const ptm* ptm);
 
 void planck_tm_at_planck_time(ptm* ptm_out, ptime_t time);
