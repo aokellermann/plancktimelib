@@ -1,16 +1,17 @@
 #include <time.h>
 #include <gmp.h>
-#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
-#include <math.h>
 
 #include "planckclock.h"
 
 #define TIME_PER_NSECOND     "1.85488921611077614362073522501613984835872810662879e34"
 #define TIME_SINCE_BIG_BANG  "8071833529780809902742760646451040575040216335127996084558318"
 #define PLANCK_TIME_SIZE    8
+#define NIBBLE_SIZE_BITS    (unsigned char)4
+
+// region Misc Helper Functions
 
 #define ts_add(a, b, result)			                \
   do {									                \
@@ -33,7 +34,7 @@
     }									                \
   } while (0)
 
-int hex_to_int(char ch)
+unsigned int hex_to_int(char ch)
 {
     if (ch >= '0' && ch <= '9')
         return ch - '0';
@@ -41,16 +42,40 @@ int hex_to_int(char ch)
         return ch - 'A' + 10;
     if (ch >= 'a' && ch <= 'f')
         return ch - 'a' + 10;
-    return -1;
+    return 0xFF;
 }
 
-ptm* inner_planck_time_at_ts(const struct timespec* ts)
+// endregion
+
+// region Conversion Functions
+
+// region Self
+
+ptime_t ptime_at_ptm(const ptm* ptm_in)
+{
+    // Copy novs to return variable
+    ptime_t ptime_now = 0;
+    memcpy(&ptime_now, &ptm_in->nov, PLANCK_TIME_SIZE);
+    return ptime_now;
+}
+
+void ptm_at_ptime(ptm* ptm_out, ptime_t time_in)
+{
+    memset(ptm_out, 0, (void*)&ptm_out->nov - (void*)ptm_out);
+    memcpy(&ptm_out->nov, &time_in, PLANCK_TIME_SIZE);
+}
+
+// endregion
+
+// region timespec
+
+ptime_t ptime_at_ts(ptm* ptm_out, const struct timespec* ts_in)
 {
     // Set up constants and input time
     mpf_t input_unix_time_in_ns, time_per_ns, time_since_big_bang;
-    mpf_init_set_ui(input_unix_time_in_ns, ts->tv_sec);
+    mpf_init_set_ui(input_unix_time_in_ns, ts_in->tv_sec);
     mpf_mul_ui(input_unix_time_in_ns, input_unix_time_in_ns, 1000000000);
-    mpf_add_ui(input_unix_time_in_ns, input_unix_time_in_ns, ts->tv_nsec);
+    mpf_add_ui(input_unix_time_in_ns, input_unix_time_in_ns, ts_in->tv_nsec);
     mpf_init_set_str(time_per_ns, TIME_PER_NSECOND, 10);
     mpf_init_set_str(time_since_big_bang, TIME_SINCE_BIG_BANG, 10);
 
@@ -70,42 +95,36 @@ ptm* inner_planck_time_at_ts(const struct timespec* ts)
     char* input_planck_time_str = mpz_get_str(NULL, 16, input_planck_time_z);
 
     // Allocate output struct and copy data
-    void* pt = calloc(1, sizeof(ptm));
     int i, j = (int)strlen(input_planck_time_str) - 1;
     unsigned char byte;
+    void* pt = ptm_out;
+    memset(pt, 0, sizeof(ptm));
     for (i = 0; j >= 0; ++i, j -= 2)
     {
         byte = hex_to_int(input_planck_time_str[j]);
         if (j > 0)  // check if nibble to left is occupied
-            byte += (hex_to_int(input_planck_time_str[j - 1]) << 4);
+            byte += (hex_to_int(input_planck_time_str[j - 1]) << NIBBLE_SIZE_BITS);
 
         memset(&pt[i], byte, 1);
     }
 
-    return pt;
+    return ptime_at_ptm(ptm_out);
 }
 
-ptime_t planck_time_at_planck_tm(const ptm* ptm)
+int ts_at_ptime(struct timespec* ts_out, ptime_t ptime_in)
 {
-    // Copy novs to return variable
-    ptime_t ptime_now = 0;
-    memcpy(&ptime_now, &ptm->nov, PLANCK_TIME_SIZE);
-    return ptime_now;
+    ptm ptm_in;
+    ptm_at_ptime(&ptm_in, ptime_in);
+    return ts_at_ptm(ts_out, &ptm_in);
 }
 
-void planck_tm_at_planck_time(ptm* ptm_out, ptime_t time)
-{
-    memset(ptm_out, 0, (void*)&ptm_out->nov - (void*)ptm_out);
-    memcpy(&ptm_out->nov, &time, PLANCK_TIME_SIZE);
-}
-
-int ts_at_planck_time(struct timespec* ts_out, const ptm* ptime)
+int ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in)
 {
     mpz_t total_time, current_byte;
     mpz_init_set_ui(total_time, 0);
     mpz_init(current_byte);
     unsigned char pwr_base_2 = 0x0, byte;
-    const void* void_ptime = ptime;
+    const void* void_ptime = ptm_in;
     int j;
     for (j = 0; j < (int)sizeof(ptm); ++j)
     {
@@ -152,45 +171,209 @@ int ts_at_planck_time(struct timespec* ts_out, const ptm* ptime)
     return 1;
 }
 
-ptime_t planck_time_now(ptm** ptm_ph_out)
-{
-    // Get current time
-    struct timespec ts_now;
-    clock_gettime(CLOCK_REALTIME, &ts_now);
+// endregion
 
-    return planck_time_at_ts(&ts_now, ptm_ph_out);
+// endregion
+
+// region Arithmetic
+
+// region Self
+
+int ptm_add_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b)
+{
+    ptm psum = {0};
+    uint16_t tsum;
+    uint8_t s = 0, a, b;
+    int i;
+    void* vs = &psum;
+    const void* va = ptm_in_a, * vb = ptm_in_b;
+    for (i = 0; i < sizeof(ptm); ++i)
+    {
+        memcpy(&a, &va[i], 1);
+        memcpy(&b, &vb[i], 1);
+        tsum = s + a + b;
+        s = 0;
+        if (tsum > 0xFF)
+        {
+            // Overflow
+            if (i == sizeof(ptm) - 1)
+                return 0;
+
+            // Set higher power to left byte
+            s = tsum >> (unsigned int)8;
+
+            // Get right byte
+            tsum &= (unsigned int)0xFF;
+        }
+
+        // Write byte
+        memset(&vs[i], tsum, 1);
+    }
+
+    memcpy(ptm_out, &psum, sizeof(ptm));
+    return 1;
 }
 
-ptime_t planck_time_at_ts(struct timespec* ts, ptm** ptm_ph_out)
+int ptm_add_ptime(ptm* ptm_out, const ptm* ptm_in_a, ptime_t ptime_in_b)
 {
-    ptm* ptm_now = inner_planck_time_at_ts(ts);
-    ptime_t ptime_now = planck_time_at_planck_tm(ptm_now);
-
-    // If handle ptr is not null, set. Otherwise free ptm_now.
-    if (ptm_ph_out)
-        *ptm_ph_out = ptm_now;
-    else
-        free(ptm_now);
-
-    return ptime_now;
+    ptm ptm_in_b;
+    ptm_at_ptime(&ptm_in_b, ptime_in_b);
+    return ptm_add_ptm(ptm_out, ptm_in_a, &ptm_in_b);
 }
 
-void planck_difftime_get_ts(const ptm* start, const ptm* end, struct timespec* ts_out)
+int ptime_add_ptm(ptm* ptm_out, ptime_t ptime_in_a, const ptm* ptm_in_b)
 {
-    struct timespec ts_start, ts_end;
-    ts_at_planck_time(&ts_start, start);
-    ts_at_planck_time(&ts_end, end);
-    ts_sub(&ts_end, &ts_start, ts_out);
+    ptm ptm_in_a;
+    ptm_at_ptime(&ptm_in_a, ptime_in_a);
+    return ptm_add_ptm(ptm_out, &ptm_in_a, ptm_in_b);
 }
 
-size_t planck_strftime(char *s, size_t max, const char *format,
-                       const ptm *tm)
+int ptime_add_ptime(ptm* ptm_out, ptime_t ptime_in_a, ptime_t ptime_in_b)
+{
+    ptm ptm_in_a, ptm_in_b;
+    ptm_at_ptime(&ptm_in_a, ptime_in_a);
+    ptm_at_ptime(&ptm_in_b, ptime_in_b);
+    return ptm_add_ptm(ptm_out, &ptm_in_a, &ptm_in_b);
+}
+
+int ptm_sub_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b)
+{
+    ptm pdif = {0};
+    int16_t tdif;
+    uint16_t s = 0;
+    uint8_t a, b;
+    int i;
+    void* vd = &pdif;
+    const void* va = ptm_in_a, * vb = ptm_in_b;
+    for (i = sizeof(ptm) - 1; i >= 0; --i)
+    {
+        memcpy(&a, &va[i], 1);
+        memcpy(&b, &vb[i], 1);
+        tdif = s + a - b;
+        s = 0;
+        if (tdif < 0)
+        {
+            // Underflow (before big bang)
+            if (i == 0)
+                return 0;
+
+            uint16_t utdif = -tdif;
+
+            // Set lower power to right byte
+            s = utdif << (unsigned int)8;
+
+            // Get left byte
+            utdif &= (unsigned int)0xFF00;
+            tdif = utdif;
+        }
+
+        // Write byte
+        memset(&vd[i], tdif, 1);
+    }
+
+    memcpy(ptm_out, &pdif, sizeof(ptm));
+    return 1;
+}
+
+int ptm_sub_ptime(ptm* ptm_out, const ptm* ptm_in_a, ptime_t ptime_in_b)
+{
+    ptm ptm_in_b;
+    ptm_at_ptime(&ptm_in_b, ptime_in_b);
+    return ptm_sub_ptm(ptm_out, ptm_in_a, &ptm_in_b);
+}
+
+int ptime_sub_ptm(ptm* ptm_out, ptime_t ptime_in_a, const ptm* ptm_in_b)
+{
+    ptm ptm_in_a;
+    ptm_at_ptime(&ptm_in_a, ptime_in_a);
+    return ptm_sub_ptm(ptm_out, &ptm_in_a, ptm_in_b);
+}
+
+int ptime_sub_ptime(ptm* ptm_out, ptime_t ptime_in_a, ptime_t ptime_in_b)
+{
+    ptm ptm_in_a, ptm_in_b;
+    ptm_at_ptime(&ptm_in_a, ptime_in_a);
+    ptm_at_ptime(&ptm_in_b, ptime_in_b);
+    return ptm_add_ptm(ptm_out, &ptm_in_a, &ptm_in_b);
+}
+
+// endregion
+
+// region timespec
+
+int ptm_add_ts(ptm* ptm_out, const ptm* ptm_in_a, const struct timespec* timespec_in_b)
+{
+    ptm ptm_in_b;
+    ptime_at_ts(&ptm_in_b, timespec_in_b);
+    return ptm_add_ptm(ptm_out, ptm_in_a, &ptm_in_b);
+}
+
+int ptime_add_ts(ptm* ptm_out, ptime_t ptime_in_a, const struct timespec* timespec_in_b)
+{
+    ptm ptm_in_a, ptm_in_b;
+    ptm_at_ptime(&ptm_in_a, ptime_in_a);
+    ptime_at_ts(&ptm_in_b, timespec_in_b);
+    return ptm_add_ptm(ptm_out, &ptm_in_a, &ptm_in_b);
+}
+
+int ts_add_ptm(ptm* ptm_out, const struct timespec* timespec_in_a, const ptm* ptm_in_b)
+{
+    ptm ptm_in_a;
+    ptime_at_ts(&ptm_in_a, timespec_in_a);
+    return ptm_add_ptm(ptm_out, &ptm_in_a, ptm_in_b);
+}
+
+int ts_add_ptime(ptm* ptm_out, const struct timespec* timespec_in_a, ptime_t ptime_in_b)
+{
+    ptm ptm_in_a, ptm_in_b;
+    ptm_at_ptime(&ptm_in_a, ptime_in_b);
+    ptime_at_ts(&ptm_in_b, timespec_in_a);
+    return ptm_add_ptm(ptm_out, &ptm_in_a, &ptm_in_b);
+}
+
+int ptm_sub_ts(ptm* ptm_out, const ptm* ptm_in_a, const struct timespec* timespec_in_b)
+{
+    ptm ptm_in_b;
+    ptime_at_ts(&ptm_in_b, timespec_in_b);
+    return ptm_sub_ptm(ptm_out, ptm_in_a, &ptm_in_b);
+}
+
+int ptime_sub_ts(ptm* ptm_out, ptime_t ptime_in_a, const struct timespec* timespec_in_b)
+{
+    ptm ptm_in_a, ptm_in_b;
+    ptm_at_ptime(&ptm_in_a, ptime_in_a);
+    ptime_at_ts(&ptm_in_b, timespec_in_b);
+    return ptm_sub_ptm(ptm_out, &ptm_in_a, &ptm_in_b);
+}
+
+int ts_sub_ptm(ptm* ptm_out, const struct timespec* timespec_in_a, const ptm* ptm_in_b)
+{
+    ptm ptm_in_a;
+    ptime_at_ts(&ptm_in_a, timespec_in_a);
+    return ptm_sub_ptm(ptm_out, &ptm_in_a, ptm_in_b);
+}
+
+int ts_sub_ptime(ptm* ptm_out, const struct timespec* timespec_in_a, ptime_t ptime_in_b)
+{
+    ptm ptm_in_a, ptm_in_b;
+    ptm_at_ptime(&ptm_in_a, ptime_in_b);
+    ptime_at_ts(&ptm_in_b, timespec_in_a);
+    return ptm_sub_ptm(ptm_out, &ptm_in_a, &ptm_in_b);
+}
+
+// endregion
+
+// endregion
+
+// region Formatting
+
+unsigned long strfptm(char* str_out, unsigned long max, const char* format, const ptm* ptm_in)
 {
     // Format: A-Z for powers of 10^2
 
     size_t i = 0, j = 0, maxf = strlen(format);
     const unsigned char mask = 0xf;
-    const void* tm_void = tm;
+    const void* tm_void = ptm_in;
     while (i < max && j < maxf)
     {
         if (j != maxf - 1 && format[j] == '%')
@@ -201,9 +384,9 @@ size_t planck_strftime(char *s, size_t max, const char *format,
                 unsigned int c_from_zero = ('Z' - c), c_hex = 0;
                 memcpy(&c_hex, &tm_void[c_from_zero], 1);
 
-                sprintf(&s[i], "%x%x", (c_hex >> 4) & mask, c_hex & mask);
-                s[i] = toupper(s[i]);
-                s[i + 1] = toupper(s[i + 1]);
+                sprintf(&str_out[i], "%x%x", (c_hex >> 4) & mask, c_hex & mask);
+                str_out[i] = toupper(str_out[i]);
+                str_out[i + 1] = toupper(str_out[i + 1]);
 
                 i += 2;
                 j += 2;
@@ -215,11 +398,32 @@ size_t planck_strftime(char *s, size_t max, const char *format,
         }
         else
         {
-            s[i] = format[j];
+            str_out[i] = format[j];
             ++i;
             ++j;
         }
     }
-    s[i] = '\0';
+    str_out[i] = '\0';
     return i;
 }
+
+unsigned long strfptime(char *str_out, unsigned long max, const char *format, ptime_t ptime_in)
+{
+    ptm ptm_in;
+    ptm_at_ptime(&ptm_in, ptime_in);
+    return strfptm(str_out, max, format, &ptm_in);
+}
+
+// endregion
+
+// region Other
+
+ptime_t ptime_now(ptm* ptm_out)
+{
+    // Get current time
+    struct timespec ts_now;
+    clock_gettime(CLOCK_REALTIME, &ts_now);
+    return ptime_at_ts(ptm_out, &ts_now);
+}
+
+// endregion

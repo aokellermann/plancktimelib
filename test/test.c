@@ -7,39 +7,34 @@ int main()
 {
     printf("Current unix time: %ld\n", time(NULL));
 
-    ptm *tm;
-    ptime_t time_now = planck_time_now(&tm);
+    ptm tm;
+    ptime_t time_now = ptime_now(&tm);
     printf("ptime_t now: %lx\n", time_now);
 
     printf("ptm bytes: %04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x\n",
-           tm->doe, tm->el, tm->dec, tm->nov, tm->oct, tm->sep, tm->hec,
-           tm->quin, tm->quat, tm->tre, tm->du, tm->un, tm->units);
+           tm.doe, tm.el, tm.dec, tm.nov, tm.oct, tm.sep, tm.hec,
+           tm.quin, tm.quat, tm.tre, tm.du, tm.un, tm.units);
 
     char buf[sizeof(ptm) + 1];
     printf("planck_strftime bytes written: %lu\n",
-           planck_strftime(buf, 24, "%C%D %E %F:%G %H ", tm));
+           strfptm(buf, sizeof(ptm), "%C%D %E %F:%G %H ", &tm));
     printf("planck_strftime out: %s\n", buf);
 
-    struct timespec tv_now;
-    ts_at_planck_time(&tv_now, tm);
-    printf("tv now: %ld.%09ld\n", tv_now.tv_sec, tv_now.tv_nsec);
+    struct timespec ts_now;
+    ts_at_ptm(&ts_now, &tm);
+    printf("ts now: %ld.%09ld\n", ts_now.tv_sec, ts_now.tv_nsec);
 
-    ++time_now;
-    printf("ptime_t next nov: %lx\n", time_now);
+    ptm ptm_next_nov, ptm_one_nov = {0};
+    ptm_one_nov.nov = 1;
+    ptm_add_ptm(&ptm_next_nov, &tm, &ptm_one_nov);
+    char buf2[sizeof(ptm) * 2 + 1];
+    strfptm(buf2, sizeof(ptm) * 2, "%A%B%C%D%E%F%G%H%I%J%K%L%M%N%O%P%Q%R%S%T%U%V%W%X%Y%Z", &ptm_next_nov);
+    printf("time at next nov: %s\n", buf2);
 
-    ptm next_nov;
-    planck_tm_at_planck_time(&next_nov, time_now);
-    printf("next nov bytes: %04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x%04x\n",
-           next_nov.doe, next_nov.el, next_nov.dec, next_nov.nov, next_nov.oct, next_nov.sep, next_nov.hec,
-           next_nov.quin, next_nov.quat, next_nov.tre, next_nov.du, next_nov.un, next_nov.units);
-
-    struct timespec ts_next_nov;
-    ts_at_planck_time(&ts_next_nov, &next_nov);
-    printf("tv at next nov: %ld.%09ld\n", ts_next_nov.tv_sec, ts_next_nov.tv_nsec);
-
-    struct timespec ts_difference;
-    planck_difftime_get_ts(tm, &next_nov, &ts_difference);
-    printf("difference between novs: %ld.%09ld\n", ts_difference.tv_sec, ts_difference.tv_nsec);
+    ptm ptm_sub_now;
+    ptm_sub_ptm(&ptm_sub_now, &ptm_next_nov, &ptm_one_nov);
+    strfptm(buf2, sizeof(ptm) * 2, "%A%B%C%D%E%F%G%H%I%J%K%L%M%N%O%P%Q%R%S%T%U%V%W%X%Y%Z", &ptm_sub_now);
+    printf("time at next nov: %s\n", buf2);
 
     return 0;
 }
