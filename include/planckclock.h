@@ -111,6 +111,12 @@ int ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in);
 
 // endregion
 
+// region interval
+
+int ts_interval_ptm_ptm(struct timespec* ts_out, const ptm* ptm_in_a, const ptm* ptm_in_b);
+
+// endregion
+
 // endregion
 
 // region Arithmetic

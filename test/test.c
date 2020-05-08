@@ -34,7 +34,11 @@ int main()
     ptm ptm_sub_now;
     ptm_sub_ptm(&ptm_sub_now, &ptm_next_nov, &ptm_one_nov);
     strfptm(buf2, sizeof(ptm) * 2, "%A%B%C%D%E%F%G%H%I%J%K%L%M%N%O%P%Q%R%S%T%U%V%W%X%Y%Z", &ptm_sub_now);
-    printf("time at next nov: %s\n", buf2);
+    printf("time now: %s\n", buf2);
+
+    struct timespec ts_next_nov;
+    ts_interval_ptm_ptm(&ts_next_nov, &ptm_sub_now, &ptm_next_nov);
+    printf("ts interval until next nov: %ld.%09ld\n", ts_next_nov.tv_sec, ts_next_nov.tv_nsec);
 
     return 0;
 }

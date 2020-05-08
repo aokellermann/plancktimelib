@@ -45,6 +45,37 @@ unsigned int hex_to_int(char ch)
     return 0xFF;
 }
 
+void ptm_total_time(mpz_t* mpz_out, const ptm* ptm_in)
+{
+    mpz_t current_byte;
+    mpz_init_set_ui(*mpz_out, 0);
+    mpz_init(current_byte);
+    unsigned char pwr_base_2 = 0x0, byte;
+    const void* void_ptime = ptm_in;
+    int j;
+    for (j = 0; j < (int)sizeof(ptm); ++j)
+    {
+        // Get byte
+        memcpy(&byte, &void_ptime[j], 1);
+
+        // Get place value
+        mpz_set_ui(current_byte, byte);
+        mpz_mul_2exp(current_byte, current_byte, pwr_base_2);
+
+        // Add to total
+        mpz_add(*mpz_out, *mpz_out, current_byte);
+
+        pwr_base_2 += 8;
+    }
+}
+
+void ptime_total_time(mpf_t* mpf_out, ptime_t ptime_in)
+{
+    ptm ptm_in;
+    ptm_at_ptime(&ptm_in, ptime_in);
+    ptm_total_time(mpf_out, &ptm_in);
+}
+
 // endregion
 
 // region Conversion Functions
@@ -120,26 +151,8 @@ int ts_at_ptime(struct timespec* ts_out, ptime_t ptime_in)
 
 int ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in)
 {
-    mpz_t total_time, current_byte;
-    mpz_init_set_ui(total_time, 0);
-    mpz_init(current_byte);
-    unsigned char pwr_base_2 = 0x0, byte;
-    const void* void_ptime = ptm_in;
-    int j;
-    for (j = 0; j < (int)sizeof(ptm); ++j)
-    {
-        // Get byte
-        memcpy(&byte, &void_ptime[j], 1);
-
-        // Get place value
-        mpz_set_ui(current_byte, byte);
-        mpz_mul_2exp(current_byte, current_byte, pwr_base_2);
-
-        // Add to total
-        mpz_add(total_time, total_time, current_byte);
-
-        pwr_base_2 += 8;
-    }
+    mpz_t total_time;
+    ptm_total_time(&total_time, ptm_in);
 
     // Get time since unix epoch
     mpz_t time_before_unix_epoch, time_since_unix_epoch;
@@ -169,6 +182,42 @@ int ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in)
     ts_out->tv_sec = seconds;
     ts_out->tv_nsec = nseconds;
     return 1;
+}
+
+// endregion
+
+// region interval
+
+int ts_interval_ptm_ptm(struct timespec* ts_out, const ptm* ptm_in_a, const ptm* ptm_in_b)
+{
+    ptm ptm_difference;
+    ptm_sub_ptm(&ptm_difference, ptm_in_b, ptm_in_a);
+
+    mpf_t time_per_ns;
+    mpf_init_set_str(time_per_ns, TIME_PER_NSECOND, 10);
+
+    mpz_t total_time;
+    ptm_total_time(&total_time, &ptm_difference);
+
+    mpf_t total_nseconds_f;
+    mpf_init(total_nseconds_f);
+    mpf_set_z(total_nseconds_f, total_time);
+    mpf_div(total_nseconds_f, total_nseconds_f, time_per_ns);
+
+    mpf_t seconds;
+    mpz_t nseconds;
+    mpf_init_set(seconds, total_nseconds_f);
+    mpz_init(nseconds);
+    mpz_set_f(nseconds, total_nseconds_f);
+    mpf_div_ui(seconds, seconds, 1000000000);
+    mpz_mod_ui(nseconds, nseconds, 1000000000);
+    mpz_abs(nseconds, nseconds);
+
+    if (!mpf_fits_slong_p(seconds))
+        return 0;
+
+    ts_out->tv_sec = mpf_get_si(seconds);
+    ts_out->tv_nsec = mpz_get_ui(nseconds);
 }
 
 // endregion
