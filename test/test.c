@@ -658,6 +658,180 @@ void test_sub_self_is_zero(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* Bug fix regression tests                                           */
+/* ------------------------------------------------------------------ */
+
+void test_precision_tight_roundtrip(void)
+{
+    /* With proper GMP precision (256 bits), timespec->ptm->timespec
+       roundtrip should be exact for seconds, nsec within 1 */
+    struct timespec ts_in = {1700000000, 999999999};
+    ptm tm;
+    ptime_at_ts(&tm, &ts_in);
+
+    struct timespec ts_out;
+    int ok = ts_at_ptm(&ts_out, &tm);
+    ASSERT_EQ_INT("precision roundtrip success", 1, ok);
+    ASSERT_EQ_LONG("precision roundtrip sec exact", ts_in.tv_sec, ts_out.tv_sec);
+    /* nsec should be very close — within 1 nsec due to Planck time granularity */
+    ASSERT_TRUE("precision roundtrip nsec tight",
+                ts_out.tv_nsec >= ts_in.tv_nsec - 1 &&
+                ts_out.tv_nsec <= ts_in.tv_nsec + 1);
+}
+
+void test_precision_multiple_timestamps(void)
+{
+    /* Test several different timestamps for roundtrip within 1 nsec.
+       mpz_set_f truncates sub-Planck-time fractions, which can lose
+       up to 1 nanosecond in the roundtrip. */
+    long timestamps[] = {0, 1, 1000, 86400, 1000000, 1700000000};
+    int i;
+    for (i = 0; i < 6; ++i)
+    {
+        struct timespec ts_in = {timestamps[i], 0};
+        ptm tm;
+        ptime_at_ts(&tm, &ts_in);
+
+        struct timespec ts_out;
+        int ok = ts_at_ptm(&ts_out, &tm);
+        ASSERT_EQ_INT("multi precision success", 1, ok);
+        /* Total nanoseconds should match within 1 nsec */
+        long long total_in  = (long long)ts_in.tv_sec * 1000000000LL + ts_in.tv_nsec;
+        long long total_out = (long long)ts_out.tv_sec * 1000000000LL + ts_out.tv_nsec;
+        long long diff = total_in - total_out;
+        ASSERT_TRUE("multi precision within 1ns", diff >= 0 && diff <= 1);
+    }
+}
+
+void test_strfptm_trailing_percent(void)
+{
+    /* Trailing % with no specifier should return 0 (error) */
+    ptm tm = {0};
+    char buf[32];
+    unsigned long n = strfptm(buf, sizeof(buf), "hello%", &tm);
+    ASSERT_EQ_U64("strfptm trailing % returns 0", 0ULL, (uint64_t)n);
+}
+
+void test_strfptm_percent_only(void)
+{
+    /* Format string that is just "%" should return 0 */
+    ptm tm = {0};
+    char buf[32];
+    unsigned long n = strfptm(buf, sizeof(buf), "%", &tm);
+    ASSERT_EQ_U64("strfptm single % returns 0", 0ULL, (uint64_t)n);
+}
+
+void test_interval_nsec_consistency(void)
+{
+    /* Interval nsec should be 0..999999999 and consistent with sec */
+    struct timespec ts_a = {0, 0}, ts_b = {10, 500000000};
+    ptm a, b;
+    ptime_at_ts(&a, &ts_a);
+    ptime_at_ts(&b, &ts_b);
+
+    struct timespec interval;
+    int ok = ts_interval_ptm_ptm(&interval, &a, &b);
+    ASSERT_EQ_INT("interval nsec consistency success", 1, ok);
+    ASSERT_TRUE("interval nsec in range", interval.tv_nsec >= 0 && interval.tv_nsec < 1000000000);
+    ASSERT_EQ_LONG("interval sec ~10", 10, interval.tv_sec);
+    /* nsec should be close to 500000000 */
+    ASSERT_TRUE("interval nsec ~500ms",
+                interval.tv_nsec >= 499000000 && interval.tv_nsec <= 501000000);
+}
+
+void test_ptm_all_fields_add_sub(void)
+{
+    /* Test that add/sub works correctly across all field boundaries */
+    ptm a = {0}, b = {0}, sum, diff;
+    a.units = 0x0001;
+    a.un    = 0x0002;
+    a.du    = 0x0003;
+    a.tre   = 0x0004;
+    a.quat  = 0x0005;
+    a.quin  = 0x0006;
+    a.hec   = 0x0007;
+    a.sep   = 0x0008;
+    a.oct   = 0x0009;
+    a.nov   = 0x000A;
+    a.dec   = 0x000B;
+    a.el    = 0x000C;
+    a.doe   = 0x000D;
+
+    b.units = 0x0010;
+    b.un    = 0x0020;
+    b.du    = 0x0030;
+    b.tre   = 0x0040;
+    b.quat  = 0x0050;
+    b.quin  = 0x0060;
+    b.hec   = 0x0070;
+    b.sep   = 0x0080;
+    b.oct   = 0x0090;
+    b.nov   = 0x00A0;
+    b.dec   = 0x00B0;
+    b.el    = 0x00C0;
+    b.doe   = 0x00D0;
+
+    int ok = ptm_add_ptm(&sum, &a, &b);
+    ASSERT_EQ_INT("all fields add success", 1, ok);
+    ASSERT_EQ_U16("all fields add units", 0x0011, sum.units);
+    ASSERT_EQ_U16("all fields add un",    0x0022, sum.un);
+    ASSERT_EQ_U16("all fields add du",    0x0033, sum.du);
+    ASSERT_EQ_U16("all fields add tre",   0x0044, sum.tre);
+    ASSERT_EQ_U16("all fields add quat",  0x0055, sum.quat);
+    ASSERT_EQ_U16("all fields add quin",  0x0066, sum.quin);
+    ASSERT_EQ_U16("all fields add hec",   0x0077, sum.hec);
+    ASSERT_EQ_U16("all fields add sep",   0x0088, sum.sep);
+    ASSERT_EQ_U16("all fields add oct",   0x0099, sum.oct);
+    ASSERT_EQ_U16("all fields add nov",   0x00AA, sum.nov);
+    ASSERT_EQ_U16("all fields add dec",   0x00BB, sum.dec);
+    ASSERT_EQ_U16("all fields add el",    0x00CC, sum.el);
+    ASSERT_EQ_U16("all fields add doe",   0x00DD, sum.doe);
+
+    ok = ptm_sub_ptm(&diff, &sum, &b);
+    ASSERT_EQ_INT("all fields sub success", 1, ok);
+    ASSERT_EQ_U16("all fields sub units", a.units, diff.units);
+    ASSERT_EQ_U16("all fields sub un",    a.un,    diff.un);
+    ASSERT_EQ_U16("all fields sub du",    a.du,    diff.du);
+    ASSERT_EQ_U16("all fields sub tre",   a.tre,   diff.tre);
+    ASSERT_EQ_U16("all fields sub quat",  a.quat,  diff.quat);
+    ASSERT_EQ_U16("all fields sub quin",  a.quin,  diff.quin);
+    ASSERT_EQ_U16("all fields sub hec",   a.hec,   diff.hec);
+    ASSERT_EQ_U16("all fields sub sep",   a.sep,   diff.sep);
+    ASSERT_EQ_U16("all fields sub oct",   a.oct,   diff.oct);
+    ASSERT_EQ_U16("all fields sub nov",   a.nov,   diff.nov);
+    ASSERT_EQ_U16("all fields sub dec",   a.dec,   diff.dec);
+    ASSERT_EQ_U16("all fields sub el",    a.el,    diff.el);
+    ASSERT_EQ_U16("all fields sub doe",   a.doe,   diff.doe);
+}
+
+void test_carry_across_field_boundary(void)
+{
+    /* Carry should propagate across uint16_t field boundaries correctly */
+    ptm a = {0}, b = {0}, result;
+    a.units = 0xFFFF;
+    a.un    = 0xFFFF;
+    b.units = 0x0001;
+    int ok = ptm_add_ptm(&result, &a, &b);
+    ASSERT_EQ_INT("cross-field carry success", 1, ok);
+    ASSERT_EQ_U16("cross-field carry units", 0x0000, result.units);
+    ASSERT_EQ_U16("cross-field carry un", 0x0000, result.un);
+    ASSERT_EQ_U16("cross-field carry du", 0x0001, result.du);
+}
+
+void test_borrow_across_field_boundary(void)
+{
+    /* Borrow should propagate across uint16_t field boundaries correctly */
+    ptm a = {0}, b = {0}, result;
+    a.du    = 0x0001;
+    b.units = 0x0001;
+    int ok = ptm_sub_ptm(&result, &a, &b);
+    ASSERT_EQ_INT("cross-field borrow success", 1, ok);
+    ASSERT_EQ_U16("cross-field borrow units", 0xFFFF, result.units);
+    ASSERT_EQ_U16("cross-field borrow un", 0xFFFF, result.un);
+    ASSERT_EQ_U16("cross-field borrow du", 0x0000, result.du);
+}
+
+/* ------------------------------------------------------------------ */
 /* main                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -723,6 +897,16 @@ int main(void)
     test_add_commutative();
     test_add_zero_identity();
     test_sub_self_is_zero();
+
+    /* Bug fix regressions */
+    test_precision_tight_roundtrip();
+    test_precision_multiple_timestamps();
+    test_strfptm_trailing_percent();
+    test_strfptm_percent_only();
+    test_interval_nsec_consistency();
+    test_ptm_all_fields_add_sub();
+    test_carry_across_field_boundary();
+    test_borrow_across_field_boundary();
 
     printf("\n=== Results: %d passed, %d failed ===\n", passed, failures);
     return failures;

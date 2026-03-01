@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <stddef.h>
 
 #include "planckclock.h"
 
@@ -11,6 +12,7 @@
 #define TIME_SINCE_BIG_BANG  "8071833529780809902742760646451040575040216335127996084558318"
 #define PLANCK_TIME_SIZE    8
 #define NIBBLE_SIZE_BITS    (unsigned char)4
+#define GMP_FLOAT_PRECISION 256
 
 // region Misc Helper Functions
 
@@ -52,12 +54,12 @@ void ptm_total_time(mpz_t* mpz_out, const ptm* ptm_in)
     mpz_init_set_ui(*mpz_out, 0);
     mpz_init(current_byte);
     unsigned char pwr_base_2 = 0x0, byte;
-    const void* void_ptime = ptm_in;
+    const unsigned char* byte_ptr = (const unsigned char*)ptm_in;
     int j;
     for (j = 0; j < (int)sizeof(ptm); ++j)
     {
         // Get byte
-        memcpy(&byte, &void_ptime[j], 1);
+        byte = byte_ptr[j];
 
         // Get place value
         mpz_set_ui(current_byte, byte);
@@ -94,7 +96,7 @@ ptime_t ptime_at_ptm(const ptm* ptm_in)
 
 void ptm_at_ptime(ptm* ptm_out, ptime_t time_in)
 {
-    memset(ptm_out, 0, (void*)&ptm_out->nov - (void*)ptm_out);
+    memset(ptm_out, 0, offsetof(ptm, nov));
     memcpy(&ptm_out->nov, &time_in, PLANCK_TIME_SIZE);
 }
 
@@ -106,17 +108,20 @@ ptime_t ptime_at_ts(ptm* ptm_out, const struct timespec* ts_in)
 {
     // Set up constants and input time
     mpf_t input_unix_time_in_ns, time_per_ns, time_since_big_bang;
-    mpf_init_set_ui(input_unix_time_in_ns, ts_in->tv_sec);
+    mpf_init2(input_unix_time_in_ns, GMP_FLOAT_PRECISION);
+    mpf_set_si(input_unix_time_in_ns, ts_in->tv_sec);
     mpf_mul_ui(input_unix_time_in_ns, input_unix_time_in_ns, 1000000000);
     mpf_add_ui(input_unix_time_in_ns, input_unix_time_in_ns, ts_in->tv_nsec);
-    mpf_init_set_str(time_per_ns, TIME_PER_NSECOND, 10);
-    mpf_init_set_str(time_since_big_bang, TIME_SINCE_BIG_BANG, 10);
+    mpf_init2(time_per_ns, GMP_FLOAT_PRECISION);
+    mpf_set_str(time_per_ns, TIME_PER_NSECOND, 10);
+    mpf_init2(time_since_big_bang, GMP_FLOAT_PRECISION);
+    mpf_set_str(time_since_big_bang, TIME_SINCE_BIG_BANG, 10);
 
     // Add time from before unix epoch to time since unix epoch
     mpf_t time_since_unix_epoch, input_planck_time_raw_f;
-    mpf_init(time_since_unix_epoch);
+    mpf_init2(time_since_unix_epoch, GMP_FLOAT_PRECISION);
     mpf_mul(time_since_unix_epoch, input_unix_time_in_ns, time_per_ns);
-    mpf_init(input_planck_time_raw_f);
+    mpf_init2(input_planck_time_raw_f, GMP_FLOAT_PRECISION);
     mpf_add(input_planck_time_raw_f, time_since_big_bang, time_since_unix_epoch);
 
     // Convert time to integer
@@ -130,15 +135,15 @@ ptime_t ptime_at_ts(ptm* ptm_out, const struct timespec* ts_in)
     // Allocate output struct and copy data
     int i, j = (int)strlen(input_planck_time_str) - 1;
     unsigned char byte;
-    void* pt = ptm_out;
+    unsigned char* pt = (unsigned char*)ptm_out;
     memset(pt, 0, sizeof(ptm));
-    for (i = 0; j >= 0; ++i, j -= 2)
+    for (i = 0; j >= 0 && i < (int)sizeof(ptm); ++i, j -= 2)
     {
         byte = hex_to_int(input_planck_time_str[j]);
         if (j > 0)  // check if nibble to left is occupied
             byte += (hex_to_int(input_planck_time_str[j - 1]) << NIBBLE_SIZE_BITS);
 
-        memset(&pt[i], byte, 1);
+        pt[i] = byte;
     }
 
     free(input_planck_time_str);
@@ -172,11 +177,12 @@ int ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in)
 
     // Get time per nsecond
     mpf_t time_per_ns;
-    mpf_init_set_str(time_per_ns, TIME_PER_NSECOND, 10);
+    mpf_init2(time_per_ns, GMP_FLOAT_PRECISION);
+    mpf_set_str(time_per_ns, TIME_PER_NSECOND, 10);
 
     // Get nseconds since unix epoch
     mpf_t nseconds_since_unix_epoch;
-    mpf_init(nseconds_since_unix_epoch);
+    mpf_init2(nseconds_since_unix_epoch, GMP_FLOAT_PRECISION);
     mpf_set_z(nseconds_since_unix_epoch, time_since_unix_epoch);
     mpf_div(nseconds_since_unix_epoch, nseconds_since_unix_epoch, time_per_ns);
 
@@ -218,38 +224,38 @@ int ts_interval_ptm_ptm(struct timespec* ts_out, const ptm* ptm_in_a, const ptm*
         return 0;
 
     mpf_t time_per_ns;
-    mpf_init_set_str(time_per_ns, TIME_PER_NSECOND, 10);
+    mpf_init2(time_per_ns, GMP_FLOAT_PRECISION);
+    mpf_set_str(time_per_ns, TIME_PER_NSECOND, 10);
 
     mpz_t total_time;
     ptm_total_time(&total_time, &ptm_difference);
 
     mpf_t total_nseconds_f;
-    mpf_init(total_nseconds_f);
+    mpf_init2(total_nseconds_f, GMP_FLOAT_PRECISION);
     mpf_set_z(total_nseconds_f, total_time);
     mpf_div(total_nseconds_f, total_nseconds_f, time_per_ns);
 
-    mpf_t seconds;
-    mpz_t nseconds;
-    mpf_init_set(seconds, total_nseconds_f);
+    mpz_t total_nseconds_z, seconds, nseconds;
+    mpz_init(total_nseconds_z);
+    mpz_set_f(total_nseconds_z, total_nseconds_f);
+    mpz_init(seconds);
     mpz_init(nseconds);
-    mpz_set_f(nseconds, total_nseconds_f);
-    mpf_div_ui(seconds, seconds, 1000000000);
-    mpz_mod_ui(nseconds, nseconds, 1000000000);
-    mpz_abs(nseconds, nseconds);
+    mpz_tdiv_qr_ui(seconds, nseconds, total_nseconds_z, 1000000000);
 
     int result = 1;
-    if (!mpf_fits_slong_p(seconds))
+    if (!mpz_fits_slong_p(seconds))
     {
         result = 0;
     }
     else
     {
-        ts_out->tv_sec = mpf_get_si(seconds);
+        ts_out->tv_sec = mpz_get_si(seconds);
         ts_out->tv_nsec = mpz_get_ui(nseconds);
     }
 
     mpz_clear(nseconds);
-    mpf_clear(seconds);
+    mpz_clear(seconds);
+    mpz_clear(total_nseconds_z);
     mpf_clear(total_nseconds_f);
     mpz_clear(total_time);
     mpf_clear(time_per_ns);
@@ -268,20 +274,19 @@ int ptm_add_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b)
 {
     ptm psum = {0};
     uint16_t tsum;
-    uint8_t s = 0, a, b;
+    uint8_t s = 0;
     int i;
-    void* vs = &psum;
-    const void* va = ptm_in_a, * vb = ptm_in_b;
-    for (i = 0; i < sizeof(ptm); ++i)
+    unsigned char* vs = (unsigned char*)&psum;
+    const unsigned char* va = (const unsigned char*)ptm_in_a;
+    const unsigned char* vb = (const unsigned char*)ptm_in_b;
+    for (i = 0; i < (int)sizeof(ptm); ++i)
     {
-        memcpy(&a, &va[i], 1);
-        memcpy(&b, &vb[i], 1);
-        tsum = s + a + b;
+        tsum = s + va[i] + vb[i];
         s = 0;
         if (tsum > 0xFF)
         {
             // Overflow
-            if (i == sizeof(ptm) - 1)
+            if (i == (int)sizeof(ptm) - 1)
                 return 0;
 
             // Set higher power to left byte
@@ -292,7 +297,7 @@ int ptm_add_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b)
         }
 
         // Write byte
-        memset(&vs[i], tsum, 1);
+        vs[i] = (unsigned char)tsum;
     }
 
     memcpy(ptm_out, &psum, sizeof(ptm));
@@ -325,15 +330,14 @@ int ptm_sub_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b)
 {
     ptm pdif = {0};
     int16_t tdif;
-    uint8_t s = 0, a, b;
+    uint8_t s = 0;
     int i;
-    void* vd = &pdif;
-    const void* va = ptm_in_a, * vb = ptm_in_b;
+    unsigned char* vd = (unsigned char*)&pdif;
+    const unsigned char* va = (const unsigned char*)ptm_in_a;
+    const unsigned char* vb = (const unsigned char*)ptm_in_b;
     for (i = 0; i < (int)sizeof(ptm); ++i)
     {
-        memcpy(&a, &va[i], 1);
-        memcpy(&b, &vb[i], 1);
-        tdif = a - b - s;
+        tdif = va[i] - vb[i] - s;
         s = 0;
         if (tdif < 0)
         {
@@ -349,7 +353,7 @@ int ptm_sub_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b)
         }
 
         /* Write byte */
-        memset(&vd[i], (unsigned char)tdif, 1);
+        vd[i] = (unsigned char)tdif;
     }
 
     memcpy(ptm_out, &pdif, sizeof(ptm));
@@ -454,11 +458,14 @@ unsigned long strfptm(char* str_out, unsigned long max, const char* format, cons
 
     size_t i = 0, j = 0, maxf = strlen(format);
     const char hex_chars[] = "0123456789ABCDEF";
-    const void* tm_void = ptm_in;
+    const unsigned char* tm_bytes = (const unsigned char*)ptm_in;
     while (j < maxf && i < max - 1)
     {
-        if (j != maxf - 1 && format[j] == '%')
+        if (format[j] == '%')
         {
+            if (j == maxf - 1)
+                return 0;
+
             const unsigned int c = format[j + 1];
             if (c >= 'A' && c <= 'Z')
             {
@@ -466,8 +473,8 @@ unsigned long strfptm(char* str_out, unsigned long max, const char* format, cons
                 if (i + 2 >= max)
                     break;
 
-                unsigned int c_from_zero = ('Z' - c), c_hex = 0;
-                memcpy(&c_hex, &tm_void[c_from_zero], 1);
+                unsigned int c_from_zero = ('Z' - c);
+                unsigned char c_hex = tm_bytes[c_from_zero];
 
                 str_out[i]     = hex_chars[(c_hex >> 4) & 0xf];
                 str_out[i + 1] = hex_chars[c_hex & 0xf];
