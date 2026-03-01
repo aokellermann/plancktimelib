@@ -3,8 +3,67 @@
 
 #include "planckclock.h"
 
+int test_sub_borrow()
+{
+    /* Test ptm_sub_ptm with borrows across byte boundaries.
+     *
+     * Subtracting Planck time at Unix epoch from Planck time at 289 seconds
+     * requires a borrow from the nov high byte into the nov low byte
+     * (0x1800 - 0x170F = 0x00F1), which exercises the borrow logic.
+     */
+    int failures = 0;
+
+    struct timespec ts_epoch = {0, 0};
+    ptm ptm_epoch;
+    ptime_at_ts(&ptm_epoch, &ts_epoch);
+
+    struct timespec ts_289 = {289, 0};
+    ptm ptm_289, ptm_dur;
+    ptime_at_ts(&ptm_289, &ts_289);
+    ptm_sub_ptm(&ptm_dur, &ptm_289, &ptm_epoch);
+
+    /* 289 seconds ~ 0xF0 novs (each nov ~ 1.2 seconds) */
+    if (ptm_dur.nov < 0xEF || ptm_dur.nov > 0xF1)
+    {
+        printf("FAIL: 289s duration nov=0x%X, expected ~0xF0\n", ptm_dur.nov);
+        ++failures;
+    }
+
+    /* Verify monotonicity: each second should increment by ~0.83 novs */
+    int i;
+    uint16_t prev_nov = 0;
+    for (i = 0; i <= 360; ++i)
+    {
+        struct timespec ts = {i, 0};
+        ptm ptm_abs, ptm_d;
+        ptime_at_ts(&ptm_abs, &ts);
+        ptm_sub_ptm(&ptm_d, &ptm_abs, &ptm_epoch);
+        if (ptm_d.nov < prev_nov)
+        {
+            printf("FAIL: nov decreased from 0x%X to 0x%X at %d seconds\n",
+                   prev_nov, ptm_d.nov, i);
+            ++failures;
+        }
+        prev_nov = ptm_d.nov;
+    }
+
+    /* 360 seconds ~ 0x12C novs */
+    if (prev_nov < 0x12A || prev_nov > 0x12E)
+    {
+        printf("FAIL: 360s duration nov=0x%X, expected ~0x12C\n", prev_nov);
+        ++failures;
+    }
+
+    if (failures == 0)
+        printf("ptm_sub_ptm borrow test: PASS\n");
+
+    return failures;
+}
+
 int main()
 {
+    int failures = 0;
+
     printf("Current unix time: %ld\n", time(NULL));
 
     ptm tm;
@@ -40,5 +99,7 @@ int main()
     ts_interval_ptm_ptm(&ts_next_nov, &ptm_sub_now, &ptm_next_nov);
     printf("ts interval until next nov: %ld.%09ld\n", ts_next_nov.tv_sec, ts_next_nov.tv_nsec);
 
-    return 0;
+    failures += test_sub_borrow();
+
+    return failures;
 }
