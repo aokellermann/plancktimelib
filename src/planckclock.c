@@ -289,35 +289,31 @@ int ptm_sub_ptm(ptm* ptm_out, const ptm* ptm_in_a, const ptm* ptm_in_b)
 {
     ptm pdif = {0};
     int16_t tdif;
-    uint16_t s = 0;
-    uint8_t a, b;
+    uint8_t s = 0, a, b;
     int i;
     void* vd = &pdif;
     const void* va = ptm_in_a, * vb = ptm_in_b;
-    for (i = sizeof(ptm) - 1; i >= 0; --i)
+    for (i = 0; i < (int)sizeof(ptm); ++i)
     {
         memcpy(&a, &va[i], 1);
         memcpy(&b, &vb[i], 1);
-        tdif = s + a - b;
+        tdif = a - b - s;
         s = 0;
         if (tdif < 0)
         {
-            // Underflow (before big bang)
-            if (i == 0)
+            if (i == (int)sizeof(ptm) - 1)
+            {
+                /* Underflow: result is before big bang */
                 return 0;
+            }
 
-            uint16_t utdif = -tdif;
-
-            // Set lower power to right byte
-            s = utdif << (unsigned int)8;
-
-            // Get left byte
-            utdif &= (unsigned int)0xFF00;
-            tdif = utdif;
+            /* Borrow from next higher byte */
+            tdif += 256;
+            s = 1;
         }
 
-        // Write byte
-        memset(&vd[i], tdif, 1);
+        /* Write byte */
+        memset(&vd[i], (unsigned char)tdif, 1);
     }
 
     memcpy(ptm_out, &pdif, sizeof(ptm));
@@ -343,7 +339,7 @@ int ptime_sub_ptime(ptm* ptm_out, ptime_t ptime_in_a, ptime_t ptime_in_b)
     ptm ptm_in_a, ptm_in_b;
     ptm_at_ptime(&ptm_in_a, ptime_in_a);
     ptm_at_ptime(&ptm_in_b, ptime_in_b);
-    return ptm_add_ptm(ptm_out, &ptm_in_a, &ptm_in_b);
+    return ptm_sub_ptm(ptm_out, &ptm_in_a, &ptm_in_b);
 }
 
 // endregion
