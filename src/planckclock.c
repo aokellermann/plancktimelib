@@ -1,4 +1,5 @@
 #include <time.h>
+#include <stdlib.h>
 #include <gmp.h>
 #include <string.h>
 #include <stdio.h>
@@ -16,7 +17,7 @@
 #define ts_add(a, b, result)			                \
   do {									                \
     (result)->tv_sec  = (a)->tv_sec  + (b)->tv_sec;		\
-    (result)->tv_nsec = (a)->tv_usec + (b)->tv_nsec;	\
+    (result)->tv_nsec = (a)->tv_nsec + (b)->tv_nsec;	\
     if ((result)->tv_nsec >= 1000000000)				\
     {									                \
 	    ++(result)->tv_sec;						        \
@@ -67,13 +68,14 @@ void ptm_total_time(mpz_t* mpz_out, const ptm* ptm_in)
 
         pwr_base_2 += 8;
     }
+    mpz_clear(current_byte);
 }
 
-void ptime_total_time(mpf_t* mpf_out, ptime_t ptime_in)
+void ptime_total_time(mpz_t* mpz_out, ptime_t ptime_in)
 {
     ptm ptm_in;
     ptm_at_ptime(&ptm_in, ptime_in);
-    ptm_total_time(mpf_out, &ptm_in);
+    ptm_total_time(mpz_out, &ptm_in);
 }
 
 // endregion
@@ -139,6 +141,14 @@ ptime_t ptime_at_ts(ptm* ptm_out, const struct timespec* ts_in)
         memset(&pt[i], byte, 1);
     }
 
+    free(input_planck_time_str);
+    mpz_clear(input_planck_time_z);
+    mpf_clear(input_planck_time_raw_f);
+    mpf_clear(time_since_unix_epoch);
+    mpf_clear(time_since_big_bang);
+    mpf_clear(time_per_ns);
+    mpf_clear(input_unix_time_in_ns);
+
     return ptime_at_ptm(ptm_out);
 }
 
@@ -172,7 +182,14 @@ int ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in)
 
     // Return false if nseconds doesn't fit in uint64_t
     if (!mpf_fits_ulong_p(nseconds_since_unix_epoch))
+    {
+        mpf_clear(nseconds_since_unix_epoch);
+        mpf_clear(time_per_ns);
+        mpz_clear(time_since_unix_epoch);
+        mpz_clear(time_before_unix_epoch);
+        mpz_clear(total_time);
         return 0;
+    }
 
     // Get seconds and remainder nseconds
     uint64_t nseconds_since_unix_epoch_ui = mpf_get_ui(nseconds_since_unix_epoch);
@@ -181,6 +198,12 @@ int ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in)
 
     ts_out->tv_sec = seconds;
     ts_out->tv_nsec = nseconds;
+
+    mpf_clear(nseconds_since_unix_epoch);
+    mpf_clear(time_per_ns);
+    mpz_clear(time_since_unix_epoch);
+    mpz_clear(time_before_unix_epoch);
+    mpz_clear(total_time);
     return 1;
 }
 
@@ -191,7 +214,8 @@ int ts_at_ptm(struct timespec* ts_out, const ptm* ptm_in)
 int ts_interval_ptm_ptm(struct timespec* ts_out, const ptm* ptm_in_a, const ptm* ptm_in_b)
 {
     ptm ptm_difference;
-    ptm_sub_ptm(&ptm_difference, ptm_in_b, ptm_in_a);
+    if (!ptm_sub_ptm(&ptm_difference, ptm_in_b, ptm_in_a))
+        return 0;
 
     mpf_t time_per_ns;
     mpf_init_set_str(time_per_ns, TIME_PER_NSECOND, 10);
@@ -213,11 +237,23 @@ int ts_interval_ptm_ptm(struct timespec* ts_out, const ptm* ptm_in_a, const ptm*
     mpz_mod_ui(nseconds, nseconds, 1000000000);
     mpz_abs(nseconds, nseconds);
 
+    int result = 1;
     if (!mpf_fits_slong_p(seconds))
-        return 0;
+    {
+        result = 0;
+    }
+    else
+    {
+        ts_out->tv_sec = mpf_get_si(seconds);
+        ts_out->tv_nsec = mpz_get_ui(nseconds);
+    }
 
-    ts_out->tv_sec = mpf_get_si(seconds);
-    ts_out->tv_nsec = mpz_get_ui(nseconds);
+    mpz_clear(nseconds);
+    mpf_clear(seconds);
+    mpf_clear(total_nseconds_f);
+    mpz_clear(total_time);
+    mpf_clear(time_per_ns);
+    return result;
 }
 
 // endregion
@@ -401,8 +437,8 @@ int ts_sub_ptm(ptm* ptm_out, const struct timespec* timespec_in_a, const ptm* pt
 int ts_sub_ptime(ptm* ptm_out, const struct timespec* timespec_in_a, ptime_t ptime_in_b)
 {
     ptm ptm_in_a, ptm_in_b;
-    ptm_at_ptime(&ptm_in_a, ptime_in_b);
-    ptime_at_ts(&ptm_in_b, timespec_in_a);
+    ptime_at_ts(&ptm_in_a, timespec_in_a);
+    ptm_at_ptime(&ptm_in_b, ptime_in_b);
     return ptm_sub_ptm(ptm_out, &ptm_in_a, &ptm_in_b);
 }
 
@@ -417,21 +453,24 @@ unsigned long strfptm(char* str_out, unsigned long max, const char* format, cons
     // Format: A-Z for powers of 10^2
 
     size_t i = 0, j = 0, maxf = strlen(format);
-    const unsigned char mask = 0xf;
+    const char hex_chars[] = "0123456789ABCDEF";
     const void* tm_void = ptm_in;
-    while (i < max && j < maxf)
+    while (j < maxf && i < max - 1)
     {
         if (j != maxf - 1 && format[j] == '%')
         {
             const unsigned int c = format[j + 1];
             if (c >= 'A' && c <= 'Z')
             {
+                /* Need room for 2 hex chars + null terminator */
+                if (i + 2 >= max)
+                    break;
+
                 unsigned int c_from_zero = ('Z' - c), c_hex = 0;
                 memcpy(&c_hex, &tm_void[c_from_zero], 1);
 
-                sprintf(&str_out[i], "%x%x", (c_hex >> 4) & mask, c_hex & mask);
-                str_out[i] = toupper(str_out[i]);
-                str_out[i + 1] = toupper(str_out[i + 1]);
+                str_out[i]     = hex_chars[(c_hex >> 4) & 0xf];
+                str_out[i + 1] = hex_chars[c_hex & 0xf];
 
                 i += 2;
                 j += 2;
